@@ -10,8 +10,11 @@ CONV_RE = re.compile(
     re.IGNORECASE,
 )
 
+
+# Расширенная регулярка: поддержка короткой формы (BTC>20000EUR, BTC>20000toEUR)
 ALERT_RE = re.compile(
-    r"^\s*(?:уведоми|alert|notify)\s*,?\s*(?:если|когда|when)\s+(?P<base>[A-Za-z]{2,6})\s*(?P<op>[<>]=?|==)\s*(?P<value>[\d_.,]+)\s*(?:to|в|->)\s*(?P<quote>[A-Za-z]{2,6})\s*$",
+    r"^\s*(?:(?:уведоми|alert|notify)\s*,?\s*(?:если|когда|when)\s+)?"
+    r"(?P<base>[A-Za-z]{2,6})\s*(?P<op>[<>]=?|==)\s*(?P<value>[\d_.,]+)\s*(?:(?:to|в|->)\s*)?(?P<quote>[A-Za-z]{2,6})\s*$",
     re.IGNORECASE,
 )
 
