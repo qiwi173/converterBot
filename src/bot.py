@@ -1,3 +1,6 @@
+
+user_states = {}  # user_id: {"step": ..., "base": ..., "quote": ...}
+
 from __future__ import annotations
 
 import asyncio
@@ -97,6 +100,8 @@ async def create_app():
         
         if removed:
             await message.answer(f"✅ Подписка {base}/{quote} удалена!", reply_markup=get_main_keyboard())
+        # Глобальное хранилище состояний пользователя
+    # ...existing code...
         else:
             await message.answer(f"❌ Подписка {base}/{quote} не найдена.", reply_markup=get_main_keyboard())
 
@@ -351,6 +356,7 @@ async def create_app():
 
 
 async def run_bot():
+    global user_states
     bot, dp, db, rates = await create_app()
     notifier_task = asyncio.create_task(run_notifier(bot, db, rates))
     try:
