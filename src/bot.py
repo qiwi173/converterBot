@@ -13,6 +13,7 @@ from .rates import RatesService
 from .parser import parse_convert, parse_alert
 from .db import Database
 from .scheduler import run_notifier
+from .keyboards import get_main_keyboard, get_currency_keyboard, get_operator_keyboard
 
 
 HELP_TEXT = (
@@ -47,103 +48,6 @@ HELP_TEXT = (
     "Фиат: USD, EUR, GBP, JPY, CHF, CNY, AUD, CAD, RUB, UAH, KZT\n"
     "Крипта: BTC, ETH, USDT, BNB, XRP, SOL, TON, DOGE, TRX"
 )
-
-
-def get_main_keyboard() -> InlineKeyboardMarkup:
-    """Создает основную клавиатуру с кнопками"""
-    builder = InlineKeyboardBuilder()
-    
-    # Первый ряд - основные функции
-    builder.row(
-        InlineKeyboardButton(text="🔄 Конвертировать", callback_data="convert"),
-        InlineKeyboardButton(text="🔔 Подписки", callback_data="subscriptions")
-    )
-    
-    # Второй ряд - популярные конвертации
-    builder.row(
-        InlineKeyboardButton(text="💵 USD → EUR", callback_data="quick_usd_eur"),
-        InlineKeyboardButton(text="₿ BTC → USD", callback_data="quick_btc_usd")
-    )
-    
-    # Третий ряд - популярные криптовалюты
-    builder.row(
-        InlineKeyboardButton(text="⚡ ETH → USD", callback_data="quick_eth_usd"),
-        InlineKeyboardButton(text="💎 SOL → USD", callback_data="quick_sol_usd")
-    )
-    
-    # Четвертый ряд - управление
-    builder.row(
-        InlineKeyboardButton(text="📋 Мои подписки", callback_data="my_subs"),
-        InlineKeyboardButton(text="❌ Удалить подписку", callback_data="delete_sub")
-    )
-    
-    # Пятый ряд - справка
-    builder.row(
-        InlineKeyboardButton(text="❓ Помощь", callback_data="help"),
-        InlineKeyboardButton(text="ℹ️ О боте", callback_data="about")
-    )
-    
-    return builder.as_markup()
-
-
-def get_currency_keyboard() -> InlineKeyboardMarkup:
-    """Создает клавиатуру для выбора валют"""
-    builder = InlineKeyboardBuilder()
-    
-    # Фиат валюты
-    builder.row(
-        InlineKeyboardButton(text="🇺🇸 USD", callback_data="currency_USD"),
-        InlineKeyboardButton(text="🇪🇺 EUR", callback_data="currency_EUR"),
-        InlineKeyboardButton(text="🇷🇺 RUB", callback_data="currency_RUB")
-    )
-    
-    builder.row(
-        InlineKeyboardButton(text="🇬🇧 GBP", callback_data="currency_GBP"),
-        InlineKeyboardButton(text="🇯🇵 JPY", callback_data="currency_JPY"),
-        InlineKeyboardButton(text="🇨🇭 CHF", callback_data="currency_CHF")
-    )
-    
-    builder.row(
-        InlineKeyboardButton(text="🇨🇳 CNY", callback_data="currency_CNY"),
-        InlineKeyboardButton(text="🇦🇺 AUD", callback_data="currency_AUD"),
-        InlineKeyboardButton(text="🇨🇦 CAD", callback_data="currency_CAD")
-    )
-    
-    # Криптовалюты
-    builder.row(
-        InlineKeyboardButton(text="₿ BTC", callback_data="currency_BTC"),
-        InlineKeyboardButton(text="⚡ ETH", callback_data="currency_ETH"),
-        InlineKeyboardButton(text="💎 USDT", callback_data="currency_USDT")
-    )
-    
-    builder.row(
-        InlineKeyboardButton(text="🪙 BNB", callback_data="currency_BNB"),
-        InlineKeyboardButton(text="🌟 XRP", callback_data="currency_XRP"),
-        InlineKeyboardButton(text="🔮 SOL", callback_data="currency_SOL")
-    )
-    
-    # Назад
-    builder.row(
-        InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")
-    )
-    
-    return builder.as_markup()
-
-
-def get_operator_keyboard() -> InlineKeyboardMarkup:
-    """Создает клавиатуру для выбора оператора сравнения"""
-    builder = InlineKeyboardBuilder()
-    
-    builder.row(
-        InlineKeyboardButton(text="📈 Больше >", callback_data="operator_>"),
-        InlineKeyboardButton(text="📉 Меньше <", callback_data="operator_<")
-    )
-    
-    builder.row(
-        InlineKeyboardButton(text="⬅️ Назад", callback_data="convert")
-    )
-    
-    return builder.as_markup()
 
 
 async def create_app():
@@ -315,99 +219,69 @@ async def create_app():
 
     @dp.callback_query(F.data.startswith("currency_"))
     async def currency_handler(callback: CallbackQuery):
+        user_id = callback.from_user.id
         currency = callback.data.split("_")[1]
-        
-        # Определяем, из какого контекста вызвана кнопка
-        if "subscriptions" in callback.message.text.lower():
-            # Контекст подписок
-            await callback.message.edit_text(
-                f"🔔 <b>Подписка на {currency}</b>\n\n"
-                f"Выбери оператор сравнения:",
-                parse_mode="HTML",
-                reply_markup=get_operator_keyboard()
-            )
-        else:
-            # Контекст конвертации
+
+        state = user_states.get(user_id, {"step": "base"})
+        if state["step"] == "base":
+            user_states[user_id] = {"step": "quote", "base": currency}
             await callback.message.edit_text(
                 f"🔄 <b>Конвертация {currency}</b>\n\n"
                 f"Теперь выбери валюту для конвертации:",
                 parse_mode="HTML",
                 reply_markup=get_currency_keyboard()
             )
-        
-        await callback.answer()
-
-    @dp.callback_query(F.data.startswith("operator_"))
-    async def operator_handler(callback: CallbackQuery):
-        operator = callback.data.split("_")[1]
-        
-        await callback.message.edit_text(
-            f"🔔 <b>Подписка на курс</b>\n\n"
-            f"Оператор: {operator}\n\n"
-            f"💡 <b>Примеры:</b>\n"
-            f"• уведоми, если BTC {operator} 50000 to USD\n"
-            f"• alert если ETH {operator} 3000 to USD\n"
-            f"• notify когда SOL {operator} 100 to USD\n\n"
-            f"📝 <b>Напиши свой запрос:</b>",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="⬅️ Назад", callback_data="subscriptions")
-            ]])
-        )
-        await callback.answer()
-
-    @dp.callback_query(F.data == "my_subs")
-    async def my_subs_handler(callback: CallbackQuery):
-        items = await db.list_subscriptions(callback.from_user.id)
-        if not items:
+        elif state["step"] == "quote":
+            base = state["base"]
+            quote = currency
+            if base == quote:
+                await callback.answer("Выбери другую валюту!", show_alert=True)
+                return
+            user_states[user_id] = {"step": "amount", "base": base, "quote": quote}
             await callback.message.edit_text(
-                "📭 <b>У тебя пока нет подписок</b>\n\n"
-                "💡 Создай первую подписку на курс валюты!",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                    InlineKeyboardButton(text="🔔 Создать подписку", callback_data="subscriptions"),
-                    InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")
-                ]])
+                f"🔄 <b>Конвертация {base} → {quote}</b>\n\n"
+                f"Введи сумму для конвертации:",
+                parse_mode="HTML"
             )
         else:
-            lines = ["📋 <b>Твои подписки:</b>\n"]
-            for i, x in enumerate(items, 1):
-                lines.append(f"{i}. {x['base']}/{x['quote']} {x['operator']} {x['threshold']}")
-            
-            text = "\n".join(lines)
+            user_states[user_id] = {"step": "base"}
             await callback.message.edit_text(
-                text,
+                "🔄 <b>Конвертация валют</b>\n\n"
+                "Выбери базовую валюту:",
                 parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                    InlineKeyboardButton(text="🔔 Добавить еще", callback_data="subscriptions"),
-                    InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")
-                ]])
+                reply_markup=get_currency_keyboard()
             )
-        await callback.answer()
-
-    @dp.callback_query(F.data == "delete_sub")
-    async def delete_sub_handler(callback: CallbackQuery):
-        await callback.message.edit_text(
-            "❌ <b>Удаление подписки</b>\n\n"
-            "💡 <b>Используй команду:</b>\n"
-            "<code>/unsub ВАЛЮТА1 ВАЛЮТА2</code>\n\n"
-            "📝 <b>Примеры:</b>\n"
-            "• <code>/unsub BTC USD</code>\n"
-            "• <code>/unsub ETH EUR</code>\n"
-            "• <code>/unsub RUB USD</code>",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")
-            ]])
-        )
         await callback.answer()
 
     @dp.message(F.text)
     async def text_handler(message: Message):
-        text = message.text.strip()
-        
+        user_id = message.from_user.id
+        state = user_states.get(user_id)
+        if state and state.get("step") == "amount":
+            try:
+                amount = float(message.text.replace(",", "."))
+            except ValueError:
+                await message.answer("❌ Введи корректную сумму (например, 100.5)")
+                return
+            base = state["base"]
+            quote = state["quote"]
+            rate = await rates.get_rate(base, quote)
+            if rate is None:
+                await message.answer("❌ Не удалось получить курс сейчас.")
+                return
+            result = amount * rate
+            await message.answer(
+                f"💱 <b>Конвертация завершена!</b>\n\n"
+                f"📊 <b>Курс:</b> 1 {base} = {rate:.6g} {quote}\n"
+                f"💵 <b>Результат:</b> {amount} {base} = {result:.6g} {quote}",
+                parse_mode="HTML",
+                reply_markup=get_main_keyboard()
+            )
+            user_states[user_id] = {"step": "base"}
+            return
+
         # Проверяем на подписку
-        alert = parse_alert(text)
+        alert = parse_alert(message.text)
         if alert:
             await db.add_subscription(
                 user_id=message.from_user.id,
@@ -435,7 +309,7 @@ async def create_app():
             return
 
         # Проверяем на конвертацию
-        cq = parse_convert(text)
+        cq = parse_convert(message.text)
         if cq:
             rate = await rates.get_rate(cq.base, cq.quote)
             if rate is None:
